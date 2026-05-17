@@ -63,17 +63,40 @@
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%) scale(0.6);
       background: rgba(4, 4, 16, 0.98);
       padding: 40px;
       border-radius: 18px;
       text-align: center;
       color: #e4e7ff;
       display: none;
+      opacity: 0;
       z-index: 100;
       min-width: 300px;
       border: 1px solid rgba(189, 111, 255, 0.4);
       box-shadow: 0 0 30px rgba(189, 111, 255, 0.18);
+    }
+
+    #gameOver.show-spring {
+      display: block;
+      animation: gameOverSpring 900s cubic-bezier(0.2, 1.1, 0.3, 1.0) forwards;
+    }
+
+    @keyframes gameOverSpring {
+      0% {
+        transform: translate(-50%, -50%) scale(0.6);
+        opacity: 0;
+      }
+      60% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+      }
+      80% {
+        transform: translate(-50%, -50%) scale(0.95);
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+      }
     }
 
     #gameOver h1 {
@@ -212,6 +235,7 @@
     const gameState = {
       isRunning: false,
       isPaused: false,
+      isGameOver: false,
       score: 0,
       level: 1,
       selectedWord: null,
@@ -436,10 +460,6 @@
           this.vy *= -1;
           this.y = Math.max(this.height / 2, Math.min(canvas.height - this.height / 2, this.y));
         }
-
-        // Gradual friction
-        this.vx *= 0.995;
-        this.vy *= 0.995;
       }
 
       draw(ctx) {
@@ -477,6 +497,44 @@
         const dx = px - this.x;
         const dy = py - this.y;
         return Math.abs(dx) < this.width / 2 && Math.abs(dy) < this.height / 2;
+      }
+
+      intersects(other) {
+        return !(
+          this.x + this.width / 2 < other.x - other.width / 2 ||
+          this.x - this.width / 2 > other.x + other.width / 2 ||
+          this.y + this.height / 2 < other.y - other.height / 2 ||
+          this.y - this.height / 2 > other.y + other.height / 2
+        );
+      }
+
+      resolveCollision(other) {
+        if (this.matched || other.matched) return;
+
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const overlapX = (this.width + other.width) / 2 - Math.abs(dx);
+        const overlapY = (this.height + other.height) / 2 - Math.abs(dy);
+
+        if (overlapX > 0 && overlapY > 0) {
+          if (overlapX < overlapY) {
+            const separation = overlapX / 2;
+            this.x += dx > 0 ? separation : -separation;
+            other.x += dx > 0 ? -separation : separation;
+            const vx1 = this.vx;
+            const vx2 = other.vx;
+            this.vx = vx2;
+            other.vx = vx1;
+          } else {
+            const separation = overlapY / 2;
+            this.y += dy > 0 ? separation : -separation;
+            other.y += dy > 0 ? -separation : separation;
+            const vy1 = this.vy;
+            const vy2 = other.vy;
+            this.vy = vy2;
+            other.vy = vy1;
+          }
+        }
       }
     }
 
@@ -516,6 +574,8 @@
     }
 
     function startGame() {
+      if (gameState.isGameOver) return;
+
       gameState.isRunning = true;
       gameState.score = 0;
       gameState.level = 1;
@@ -538,7 +598,7 @@
     }
 
     function handleCanvasClick(e) {
-      if (!gameState.isRunning) return;
+      if (!gameState.isRunning || gameState.isGameOver) return;
 
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -590,9 +650,24 @@
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Update and draw words
+      // Update words
       for (let word of activeWords) {
         word.update();
+      }
+
+      // Detect collisions between active words
+      for (let i = 0; i < activeWords.length; i++) {
+        for (let j = i + 1; j < activeWords.length; j++) {
+          const wordA = activeWords[i];
+          const wordB = activeWords[j];
+          if (!wordA.matched && !wordB.matched && wordA.intersects(wordB)) {
+            wordA.resolveCollision(wordB);
+          }
+        }
+      }
+
+      // Draw words
+      for (let word of activeWords) {
         word.draw(ctx);
       }
 
@@ -612,12 +687,19 @@
 
     function endGame() {
       gameState.isRunning = false;
+      gameState.isGameOver = true;
       clearInterval(gameState.timeInterval);
 
       document.getElementById('finalScore').textContent = `Final Score: ${gameState.score}`;
       document.getElementById('finalLevel').textContent = `Level Reached: ${gameState.level}`;
       document.getElementById('finalMistakes').textContent = `Mistakes Made: ${gameState.mistakes}`;
-      document.getElementById('gameOver').classList.remove('hidden');
+
+      canvas.style.pointerEvents = 'none';
+      const gameOverPanel = document.getElementById('gameOver');
+      gameOverPanel.classList.remove('hidden');
+      gameOverPanel.classList.remove('show-spring');
+      void gameOverPanel.offsetWidth;
+      gameOverPanel.classList.add('show-spring');
     }
 
     // Event listeners

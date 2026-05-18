@@ -49,6 +49,29 @@ Or for development mode with DevTools:
 npm run dev
 ```
 
+## GitHub Pages Deployment
+
+This project can be hosted as a static site using GitHub Pages from the `gh-pages` branch.
+
+After pushing to GitHub, the site will be available at:
+
+`https://devinkernan491-png.github.io/word-match-game/`
+
+A GitHub Actions workflow is included to publish the repository automatically when `main` is pushed.
+
+If GitHub Pages is not enabled automatically, open the repository settings, go to **Pages**, and select the `gh-pages` branch as the source.
+
+## How to Deploy
+
+Just push changes to `main`:
+```bash
+git add .
+git commit -m "Update game"
+git push
+```
+
+GitHub Actions will build and deploy the site to the `gh-pages` branch.
+
 ## How to Play
 
 1. Click the **Start Game** button on the title screen

@@ -63,17 +63,40 @@
       position: absolute;
       top: 50%;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%) scale(0.6);
       background: rgba(4, 4, 16, 0.98);
       padding: 40px;
       border-radius: 18px;
       text-align: center;
       color: #e4e7ff;
       display: none;
+      opacity: 0;
       z-index: 100;
       min-width: 300px;
       border: 1px solid rgba(189, 111, 255, 0.4);
       box-shadow: 0 0 30px rgba(189, 111, 255, 0.18);
+    }
+
+    #gameOver.show-spring {
+      display: block;
+      animation: gameOverSpring 900ms cubic-bezier(0.2, 1.1, 0.3, 1.0) forwards;
+    }
+
+    @keyframes gameOverSpring {
+      0% {
+        transform: translate(-50%, -50%) scale(0.6);
+        opacity: 0;
+      }
+      60% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+      }
+      80% {
+        transform: translate(-50%, -50%) scale(0.95);
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+      }
     }
 
     #gameOver h1 {
@@ -123,21 +146,23 @@
     }
 
     #startScreen h1 {
-      font-size: 48px;
+      font-size: 46px;
       margin-bottom: 20px;
       letter-spacing: 0.1em;
       text-shadow: 0 0 30px rgba(128, 111, 255, 0.18);
     }
 
     #startScreen p {
-      font-size: 20px;
-      margin-bottom: 30px;
+      font-size: 18px;
+      margin-bottom: 10px;
       color: #c7d0ff;
       letter-spacing: 0.03em;
+      max-width: 560px;
     }
 
     #startButton {
-      padding: 15px 40px;
+      margin-top: 24px;
+      padding: 14px 42px;
       font-size: 20px;
       background: linear-gradient(135deg, #2bf5ff 0%, #d47bff 100%);
       color: #05050c;
@@ -161,13 +186,28 @@
     .hidden {
       display: none !important;
     }
+
+    #instructions {
+      max-width: 600px;
+      text-align: center;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
   <div id="startScreen">
-    <h1>🎮 Word Match Game</h1>
-    <p>Match English words with their Spanish translations</p>
-    <p>Click a word, then click its match!</p>
+    <h1>Spainish English Word Match</h1>
+    <div id="instructions">
+      <p>Match English words with Spanish words</p>
+      <p style="font-size: 16px; margin-top: 20px;">
+        <strong>How to Play:</strong><br>
+        Match all word pairs to advance to the next level<br>
+        Difficulty increases with each level
+      </p>
+      <p style="font-size: 14px; margin-top: 20px; opacity: 0.9;">
+        Press ESC to end game • Game ends after 5 mistakes
+      </p>
+    </div>
     <button id="startButton">Start Game</button>
   </div>
 
@@ -176,7 +216,7 @@
     <div id="ui">
       <div id="score">Score: 0</div>
       <div id="level">Level: 1</div>
-      <div id="timer">Time: 0s</div>
+      <div id="timer">Mistakes: 0/5</div>
     </div>
   </div>
 
@@ -184,10 +224,461 @@
     <h1>Game Over!</h1>
     <p id="finalScore">Final Score: 0</p>
     <p id="finalLevel">Level Reached: 1</p>
-    <p id="finalTime">Time Played: 0s</p>
+    <p id="finalMistakes">Mistakes Made: 0</p>
     <button onclick="location.reload()">Play Again</button>
   </div>
 
-  <script src="renderer.js"></script>
+  <script>
+    const gameState = {
+      isRunning: false,
+      isPaused: false,
+      isGameOver: false,
+      score: 0,
+      level: 1,
+      selectedWord: null,
+      mistakes: 0,
+      maxMistakes: 5,
+    };
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const gameContainer = document.getElementById('gameContainer');
+    const startScreen = document.getElementById('startScreen');
+
+    let wordPairs = [];
+    let activeWords = [];
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const sampleWords = [
+      { english: 'hello', spanish: 'hola' },
+      { english: 'goodbye', spanish: 'adiós' },
+      { english: 'thank you', spanish: 'gracias' },
+      { english: 'please', spanish: 'por favor' },
+      { english: 'sorry', spanish: 'lo siento' },
+      { english: 'yes', spanish: 'sí' },
+      { english: 'no', spanish: 'no' },
+      { english: 'maybe', spanish: 'quizás' },
+      { english: 'good morning', spanish: 'buenos días' },
+      { english: 'good night', spanish: 'buenas noches' },
+      { english: 'how are you', spanish: '¿cómo estás?' },
+      { english: 'my name is', spanish: 'mi nombre es' },
+      { english: 'water', spanish: 'agua' },
+      { english: 'bread', spanish: 'pan' },
+      { english: 'wine', spanish: 'vino' },
+      { english: 'coffee', spanish: 'café' },
+      { english: 'milk', spanish: 'leche' },
+      { english: 'apple', spanish: 'manzana' },
+      { english: 'orange', spanish: 'naranja' },
+      { english: 'banana', spanish: 'plátano' },
+      { english: 'house', spanish: 'casa' },
+      { english: 'door', spanish: 'puerta' },
+      { english: 'window', spanish: 'ventana' },
+      { english: 'table', spanish: 'mesa' },
+      { english: 'chair', spanish: 'silla' },
+      { english: 'book', spanish: 'libro' },
+      { english: 'school', spanish: 'escuela' },
+      { english: 'student', spanish: 'estudiante' },
+      { english: 'teacher', spanish: 'profesor' },
+      { english: 'car', spanish: 'coche' },
+      { english: 'bus', spanish: 'autobús' },
+      { english: 'train', spanish: 'tren' },
+      { english: 'doctor', spanish: 'doctor' },
+      { english: 'hospital', spanish: 'hospital' },
+      { english: 'sun', spanish: 'sol' },
+      { english: 'moon', spanish: 'luna' },
+      { english: 'star', spanish: 'estrella' },
+      { english: 'rain', spanish: 'lluvia' },
+      { english: 'tree', spanish: 'árbol' },
+      { english: 'flower', spanish: 'flor' },
+      { english: 'dog', spanish: 'perro' },
+      { english: 'cat', spanish: 'gato' },
+      { english: 'bird', spanish: 'pájaro' },
+      { english: 'fish', spanish: 'pescado' },
+      { english: 'red', spanish: 'rojo' },
+      { english: 'blue', spanish: 'azul' },
+      { english: 'green', spanish: 'verde' },
+      { english: 'yellow', spanish: 'amarillo' },
+      { english: 'black', spanish: 'negro' },
+      { english: 'white', spanish: 'blanco' },
+      { english: 'one', spanish: 'uno' },
+      { english: 'two', spanish: 'dos' },
+      { english: 'three', spanish: 'tres' },
+      { english: 'four', spanish: 'cuatro' },
+      { english: 'five', spanish: 'cinco' },
+      { english: 'mother', spanish: 'madre' },
+      { english: 'father', spanish: 'padre' },
+      { english: 'sister', spanish: 'hermana' },
+      { english: 'brother', spanish: 'hermano' },
+      { english: 'friend', spanish: 'amigo' },
+      { english: 'happy', spanish: 'feliz' },
+      { english: 'sad', spanish: 'triste' },
+      { english: 'big', spanish: 'grande' },
+      { english: 'small', spanish: 'pequeño' },
+      { english: 'fast', spanish: 'rápido' },
+      { english: 'slow', spanish: 'lento' },
+      { english: 'hot', spanish: 'caliente' },
+      { english: 'cold', spanish: 'frío' },
+      { english: 'love', spanish: 'amor' },
+      { english: 'hate', spanish: 'odio' },
+      { english: 'music', spanish: 'música' },
+      { english: 'sport', spanish: 'deporte' },
+      { english: 'food', spanish: 'comida' },
+      { english: 'restaurant', spanish: 'restaurante' },
+      { english: 'hotel', spanish: 'hotel' },
+      { english: 'street', spanish: 'calle' },
+      { english: 'city', spanish: 'ciudad' },
+      { english: 'country', spanish: 'país' },
+      { english: 'world', spanish: 'mundo' },
+      { english: 'time', spanish: 'tiempo' },
+      { english: 'day', spanish: 'día' },
+      { english: 'night', spanish: 'noche' },
+      { english: 'week', spanish: 'semana' },
+      { english: 'month', spanish: 'mes' },
+      { english: 'year', spanish: 'año' },
+      { english: 'money', spanish: 'dinero' },
+      { english: 'work', spanish: 'trabajo' },
+      { english: 'play', spanish: 'jugar' },
+      { english: 'sleep', spanish: 'dormir' },
+      { english: 'eat', spanish: 'comer' },
+      { english: 'drink', spanish: 'beber' },
+      { english: 'walk', spanish: 'caminar' },
+      { english: 'run', spanish: 'correr' },
+      { english: 'jump', spanish: 'saltar' },
+      { english: 'swim', spanish: 'nadar' },
+      { english: 'dance', spanish: 'bailar' },
+      { english: 'read', spanish: 'leer' },
+      { english: 'write', spanish: 'escribir' },
+      { english: 'speak', spanish: 'hablar' },
+      { english: 'listen', spanish: 'escuchar' },
+      { english: 'see', spanish: 'ver' },
+      { english: 'hear', spanish: 'oír' },
+      { english: 'feel', spanish: 'sentir' },
+      { english: 'think', spanish: 'pensar' },
+      { english: 'know', spanish: 'saber' },
+      { english: 'understand', spanish: 'entender' },
+      { english: 'learn', spanish: 'aprender' },
+      { english: 'teach', spanish: 'enseñar' },
+      { english: 'help', spanish: 'ayudar' },
+      { english: 'give', spanish: 'dar' },
+      { english: 'take', spanish: 'tomar' },
+      { english: 'buy', spanish: 'comprar' },
+      { english: 'sell', spanish: 'vender' },
+      { english: 'pay', spanish: 'pagar' },
+      { english: 'find', spanish: 'encontrar' },
+      { english: 'lose', spanish: 'perder' },
+      { english: 'start', spanish: 'empezar' },
+      { english: 'stop', spanish: 'parar' },
+      { english: 'continue', spanish: 'continuar' },
+      { english: 'finish', spanish: 'terminar' },
+      { english: 'win', spanish: 'ganar' },
+      { english: 'beautiful', spanish: 'hermoso' },
+      { english: 'ugly', spanish: 'feo' },
+      { english: 'good', spanish: 'bueno' },
+      { english: 'bad', spanish: 'malo' },
+      { english: 'expensive', spanish: 'caro' },
+      { english: 'cheap', spanish: 'barato' },
+      { english: 'strong', spanish: 'fuerte' },
+      { english: 'weak', spanish: 'débil' },
+      { english: 'smart', spanish: 'inteligente' },
+      { english: 'stupid', spanish: 'estúpido' },
+      { english: 'kind', spanish: 'amable' },
+      { english: 'mean', spanish: 'malo' },
+      { english: 'clean', spanish: 'limpio' },
+      { english: 'dirty', spanish: 'sucio' },
+      { english: 'bright', spanish: 'brillante' },
+      { english: 'dark', spanish: 'oscuro' },
+      { english: 'loud', spanish: 'ruidoso' },
+      { english: 'quiet', spanish: 'silencioso' },
+      { english: 'rich', spanish: 'rico' },
+      { english: 'poor', spanish: 'pobre' },
+      { english: 'easy', spanish: 'fácil' },
+      { english: 'difficult', spanish: 'difícil' },
+      { english: 'young', spanish: 'joven' },
+      { english: 'old', spanish: 'viejo' },
+      { english: 'new', spanish: 'nuevo' },
+      { english: 'used', spanish: 'usado' },
+      { english: 'open', spanish: 'abierto' },
+      { english: 'closed', spanish: 'cerrado' },
+      { english: 'full', spanish: 'lleno' },
+      { english: 'empty', spanish: 'vacío' },
+      { english: 'wet', spanish: 'mojado' },
+      { english: 'dry', spanish: 'seco' },
+      { english: 'light', spanish: 'ligero' },
+      { english: 'heavy', spanish: 'pesado' },
+      { english: 'long', spanish: 'largo' },
+      { english: 'short', spanish: 'corto' },
+      { english: 'tall', spanish: 'alto' },
+      { english: 'low', spanish: 'bajo' },
+      { english: 'high', spanish: 'alto' },
+      { english: 'wide', spanish: 'ancho' },
+      { english: 'narrow', spanish: 'estrecho' },
+    ];
+
+    wordPairs = sampleWords;
+
+    class WordBox {
+      constructor(text, isEnglish, x, y) {
+        this.text = text;
+        this.isEnglish = isEnglish;
+        this.x = x;
+        this.y = y;
+        this.width = 120;
+        this.height = 50;
+        this.vx = (Math.random() - 0.5) * 4;
+        this.vy = (Math.random() - 0.5) * 4;
+        this.matched = false;
+        this.selected = false;
+        this.id = Math.random();
+        this.matchId = null;
+      }
+
+      update() {
+        if (this.matched) return;
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.x - this.width / 2 < 0 || this.x + this.width / 2 > canvas.width) {
+          this.vx *= -1;
+          this.x = Math.max(this.width / 2, Math.min(canvas.width - this.width / 2, this.x));
+        }
+        if (this.y - this.height / 2 < 0 || this.y + this.height / 2 > canvas.height) {
+          this.vy *= -1;
+          this.y = Math.max(this.height / 2, Math.min(canvas.height - this.height / 2, this.y));
+        }
+      }
+
+      draw(ctx) {
+        if (this.matched) return;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        ctx.fillStyle = this.selected ? '#7c39ff' : (this.isEnglish ? '#ff3f9a' : '#15f5ff');
+        ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+
+        ctx.strokeStyle = this.selected ? '#ffffff' : 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = this.selected ? 3 : 2;
+        ctx.strokeRect(-this.width / 2, -this.height / 2, this.width, this.height);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.text.toUpperCase(), 0, 0);
+
+        ctx.restore();
+      }
+
+      contains(px, py) {
+        const dx = px - this.x;
+        const dy = py - this.y;
+        return Math.abs(dx) < this.width / 2 && Math.abs(dy) < this.height / 2;
+      }
+
+      intersects(other) {
+        return !(
+          this.x + this.width / 2 < other.x - other.width / 2 ||
+          this.x - this.width / 2 > other.x + other.width / 2 ||
+          this.y + this.height / 2 < other.y - other.height / 2 ||
+          this.y - this.height / 2 > other.y + other.height / 2
+        );
+      }
+
+      resolveCollision(other) {
+        if (this.matched || other.matched) return;
+
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const overlapX = (this.width + other.width) / 2 - Math.abs(dx);
+        const overlapY = (this.height + other.height) / 2 - Math.abs(dy);
+
+        if (overlapX > 0 && overlapY > 0) {
+          if (overlapX < overlapY) {
+            const separation = overlapX / 2;
+            this.x += dx > 0 ? separation : -separation;
+            other.x += dx > 0 ? -separation : separation;
+            const vx1 = this.vx;
+            const vx2 = other.vx;
+            this.vx = vx2;
+            other.vx = vx1;
+          } else {
+            const separation = overlapY / 2;
+            this.y += dy > 0 ? separation : -separation;
+            other.y += dy > 0 ? -separation : separation;
+            const vy1 = this.vy;
+            const vy2 = other.vy;
+            this.vy = vy2;
+            other.vy = vy1;
+          }
+        }
+      }
+    }
+
+    function createNewLevel() {
+      const pairsCount = Math.min(5 + Math.floor(gameState.level / 2), 15);
+      const selectedPairs = [];
+
+      for (let i = 0; i < pairsCount; i++) {
+        selectedPairs.push(wordPairs[Math.floor(Math.random() * wordPairs.length)]);
+      }
+
+      activeWords = [];
+
+      selectedPairs.forEach((pair) => {
+        const engWord = new WordBox(pair.english, true, Math.random() * (canvas.width - 200) + 100, Math.random() * (canvas.height - 200) + 100);
+        const spWord = new WordBox(pair.spanish, false, Math.random() * (canvas.width - 200) + 100, Math.random() * (canvas.height - 200) + 100);
+
+        engWord.matchId = spWord.id;
+        spWord.matchId = engWord.id;
+
+        const speedMultiplier = 1 + (gameState.level - 1) * 0.3;
+        engWord.vx *= speedMultiplier;
+        engWord.vy *= speedMultiplier;
+        spWord.vx *= speedMultiplier;
+        spWord.vy *= speedMultiplier;
+
+        activeWords.push(engWord, spWord);
+      });
+    }
+
+    function startGame() {
+      if (gameState.isGameOver) return;
+
+      gameState.isRunning = true;
+      gameState.score = 0;
+      gameState.level = 1;
+      gameState.selectedWord = null;
+      gameState.mistakes = 0;
+
+      startScreen.classList.add('hidden');
+      gameContainer.classList.remove('hidden');
+      document.getElementById('gameOver').classList.add('hidden');
+
+      createNewLevel();
+      updateUI();
+      gameLoop();
+    }
+
+    function updateUI() {
+      document.getElementById('score').textContent = `Score: ${gameState.score}`;
+      document.getElementById('level').textContent = `Level: ${gameState.level}`;
+      document.getElementById('timer').textContent = `Mistakes: ${gameState.mistakes}/${gameState.maxMistakes}`;
+    }
+
+    function handleCanvasClick(e) {
+      if (!gameState.isRunning || gameState.isGameOver) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      for (let word of activeWords) {
+        if (word.contains(x, y) && !word.matched) {
+          if (!gameState.selectedWord) {
+            gameState.selectedWord = word;
+            word.selected = true;
+          } else if (gameState.selectedWord.matchId === word.id) {
+            gameState.selectedWord.matched = true;
+            word.matched = true;
+            gameState.score += 12;
+
+            gameState.selectedWord = null;
+            updateUI();
+
+            if (activeWords.every(w => w.matched)) {
+              gameState.level++;
+              createNewLevel();
+            }
+          } else if (gameState.selectedWord.id !== word.id) {
+            gameState.mistakes += 1;
+            gameState.selectedWord.selected = false;
+            gameState.selectedWord = null;
+            updateUI();
+
+            if (gameState.mistakes >= gameState.maxMistakes) {
+              endGame();
+            }
+          }
+          return;
+        }
+      }
+
+      if (gameState.selectedWord) {
+        gameState.selectedWord.selected = false;
+        gameState.selectedWord = null;
+      }
+    }
+
+    function gameLoop() {
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let word of activeWords) {
+        word.update();
+      }
+
+      for (let i = 0; i < activeWords.length; i++) {
+        for (let j = i + 1; j < activeWords.length; j++) {
+          const wordA = activeWords[i];
+          const wordB = activeWords[j];
+          if (!wordA.matched && !wordB.matched && wordA.intersects(wordB)) {
+            wordA.resolveCollision(wordB);
+          }
+        }
+      }
+
+      for (let word of activeWords) {
+        word.draw(ctx);
+      }
+
+      if (gameState.selectedWord) {
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(gameState.selectedWord.x, gameState.selectedWord.y, 70, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      if (gameState.isRunning) {
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function endGame() {
+      gameState.isRunning = false;
+      gameState.isGameOver = true;
+
+      document.getElementById('finalScore').textContent = `Final Score: ${gameState.score}`;
+      document.getElementById('finalLevel').textContent = `Level Reached: ${gameState.level}`;
+      document.getElementById('finalMistakes').textContent = `Mistakes Made: ${gameState.mistakes}`;
+
+      canvas.style.pointerEvents = 'none';
+      const gameOverPanel = document.getElementById('gameOver');
+      gameOverPanel.classList.remove('hidden');
+      gameOverPanel.classList.remove('show-spring');
+      void gameOverPanel.offsetWidth;
+      gameOverPanel.classList.add('show-spring');
+    }
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+    canvas.addEventListener('click', handleCanvasClick);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && gameState.isRunning) {
+        endGame();
+      }
+    });
+  </script>
 </body>
 </html>

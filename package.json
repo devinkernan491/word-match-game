@@ -4,7 +4,9 @@
   "description": "English-Spanish word matching game with adaptive difficulty",
   "main": "main.js",
   "scripts": {
-    "start": "echo \"Open game.html in your browser to play the game.\""
+    "start": "python3 -m http.server 8000",
+    "dev": "python3 -m http.server 8000",
+    "serve": "python3 -m http.server 8000"
   },
   "keywords": ["game", "words", "matching", "english", "spanish"],
   "author": "",

@@ -19,6 +19,43 @@ const startScreen = document.getElementById('startScreen');
 let wordPairs = [];
 let activeWords = [];
 let confetti = [];
+let audioContext = null;
+
+function unlockAudio() {
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+
+  if (!audioContext) {
+    audioContext = new AudioCtor();
+  }
+
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+}
+
+function playWrongAnswerSound() {
+  unlockAudio();
+  if (!audioContext) return;
+
+  const now = audioContext.currentTime;
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(180, now);
+  oscillator.frequency.exponentialRampToValueAtTime(70, now + 0.18);
+
+  gainNode.gain.setValueAtTime(0.0001, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.3, now + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.start(now);
+  oscillator.stop(now + 0.2);
+}
 
 // Responsive canvas
 function resizeCanvas() {
@@ -172,6 +209,7 @@ function createNewLevel() {
 }
 
 function startGame() {
+  unlockAudio();
   gameState.isRunning = true;
   gameState.score = 0;
   gameState.level = 1;
@@ -275,6 +313,7 @@ function handleCanvasClick(e) {
         // Wrong match - deselect
         gameState.selectedWord.selected = false;
         gameState.selectedWord = null;
+        playWrongAnswerSound();
       }
       return;
     }

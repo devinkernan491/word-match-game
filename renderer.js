@@ -18,6 +18,7 @@ const startScreen = document.getElementById('startScreen');
 
 let wordPairs = [];
 let activeWords = [];
+let confetti = [];
 
 // Responsive canvas
 function resizeCanvas() {
@@ -56,8 +57,8 @@ class WordBox {
     this.y = y;
     this.width = 120;
     this.height = 50;
-    this.vx = (Math.random() - 0.5) * 4;
-    this.vy = (Math.random() - 0.5) * 4;
+    this.vx = (Math.random() - 0.5) * 2;
+    this.vy = (Math.random() - 0.5) * 2;
     this.matched = false;
     this.selected = false;
     this.id = Math.random();
@@ -124,7 +125,14 @@ class WordBox {
   contains(px, py) {
     const dx = px - this.x;
     const dy = py - this.y;
-    return Math.abs(dx) < this.width / 2 && Math.abs(dy) < this.height / 2;
+    const cos = Math.cos(-this.rotation);
+    const sin = Math.sin(-this.rotation);
+
+    const localX = dx * cos - dy * sin;
+    const localY = dx * sin + dy * cos;
+    const padding = 10;
+
+    return Math.abs(localX) < (this.width / 2) + padding && Math.abs(localY) < (this.height / 2) + padding;
   }
 }
 
@@ -151,7 +159,7 @@ function createNewLevel() {
     spWord.matchId = engWord.id;
 
     // Increase speed and rotation with difficulty
-    const speedMultiplier = 1 + (gameState.level - 1) * 0.3;
+    const speedMultiplier = 1 + (gameState.level - 1) * 0.2;
     engWord.vx *= speedMultiplier;
     engWord.vy *= speedMultiplier;
     engWord.rotationSpeed *= speedMultiplier;
@@ -193,6 +201,49 @@ function updateUI() {
   document.getElementById('timer').textContent = `Time: ${gameState.elapsedTime}s`;
 }
 
+function createConfettiBurst(x, y) {
+  const colors = ['#FF6B6B', '#4ECDC4', '#FFD166', '#7B68EE', '#00F5D4', '#F15BB5'];
+
+  for (let i = 0; i < 40; i++) {
+    confetti.push({
+      x,
+      y,
+      vx: (Math.random() - 0.5) * 7,
+      vy: (Math.random() - 0.5) * 7 - 1.5,
+      size: Math.random() * 6 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      alpha: 1,
+      gravity: 0.08,
+      rotation: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.25,
+    });
+  }
+}
+
+function updateConfetti() {
+  confetti = confetti.filter(piece => piece.alpha > 0.05);
+
+  for (const piece of confetti) {
+    piece.x += piece.vx;
+    piece.y += piece.vy;
+    piece.vy += piece.gravity;
+    piece.rotation += piece.spin;
+    piece.alpha -= 0.01;
+  }
+}
+
+function drawConfetti() {
+  for (const piece of confetti) {
+    ctx.save();
+    ctx.translate(piece.x, piece.y);
+    ctx.rotate(piece.rotation);
+    ctx.globalAlpha = piece.alpha;
+    ctx.fillStyle = piece.color;
+    ctx.fillRect(-piece.size / 2, -piece.size / 2, piece.size, piece.size);
+    ctx.restore();
+  }
+}
+
 function handleCanvasClick(e) {
   if (!gameState.isRunning) return;
 
@@ -210,6 +261,7 @@ function handleCanvasClick(e) {
         gameState.selectedWord.matched = true;
         word.matched = true;
         gameState.score += 10;
+        createConfettiBurst((gameState.selectedWord.x + word.x) / 2, (gameState.selectedWord.y + word.y) / 2);
 
         gameState.selectedWord = null;
         updateUI();
@@ -248,6 +300,9 @@ function gameLoop() {
     word.update();
     word.draw(ctx);
   }
+
+  updateConfetti();
+  drawConfetti();
 
   // Draw selection indicator
   if (gameState.selectedWord) {
